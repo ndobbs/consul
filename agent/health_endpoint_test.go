@@ -1045,7 +1045,8 @@ func TestHealthServiceNodes_WanTranslation(t *testing.T) {
 
 	// Wait for the WAN join.
 	addr := fmt.Sprintf("127.0.0.1:%d", a1.Config.SerfPortWAN)
-	_, err := a2.srv.agent.JoinWAN([]string{addr})
+	name := fmt.Sprintf("%s.%s", a1.Config.NodeName, a1.Config.Datacenter)
+	_, err := a2.srv.agent.JoinWAN([]string{name + "/" + addr})
 	require.NoError(t, err)
 	retry.Run(t, func(r *retry.R) {
 		require.Len(r, a1.WANMembers(), 2)

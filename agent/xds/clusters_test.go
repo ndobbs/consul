@@ -198,6 +198,11 @@ func TestClustersFromSnapshot(t *testing.T) {
 			setup:  nil,
 		},
 		{
+			name:   "mesh-gateway-using-dc-configs",
+			create: proxycfg.TestConfigSnapshotMeshGatewayUsingDatacenterConfigs,
+			setup:  nil,
+		},
+		{
 			name:   "mesh-gateway-no-services",
 			create: proxycfg.TestConfigSnapshotMeshGatewayNoServices,
 			setup:  nil,

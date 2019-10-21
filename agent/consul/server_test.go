@@ -38,6 +38,7 @@ func configureTLS(config *Config) {
 var id int64
 
 func uniqueNodeName(name string) string {
+	name = strings.ReplaceAll(name, "/", "_")
 	return fmt.Sprintf("%s-node-%d", name, atomic.AddInt64(&id, 1))
 }
 
@@ -946,7 +947,7 @@ func testVerifyRPC(s1, s2 *Server, t *testing.T) (bool, error) {
 	if leader == nil {
 		t.Fatal("no leader")
 	}
-	return s2.connPool.Ping(leader.Datacenter, leader.Addr, leader.Version, leader.UseTLS)
+	return s2.connPool.Ping(leader.Datacenter, leader.ShortName, leader.Addr, leader.Version, leader.UseTLS)
 }
 
 func TestServer_TLSToNoTLS(t *testing.T) {

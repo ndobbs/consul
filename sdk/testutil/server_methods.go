@@ -9,6 +9,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"net/url"
 	"testing"
 
 	"github.com/pkg/errors"
@@ -31,7 +32,16 @@ func (s *TestServer) JoinLAN(t *testing.T, addr string) {
 
 // JoinWAN is used to join remote datacenters together.
 func (s *TestServer) JoinWAN(t *testing.T, addr string) {
-	resp := s.put(t, "/v1/agent/join/"+addr+"?wan=1", nil)
+	s.JoinWANWithName(t, "", addr)
+}
+
+func (s *TestServer) JoinWANWithName(t *testing.T, name, addr string) {
+	u := "/v1/agent/join/" + addr + "?wan=1"
+	if name != "" {
+		u += "&name=" + url.QueryEscape(name)
+	}
+
+	resp := s.put(t, u, nil)
 	resp.Body.Close()
 }
 

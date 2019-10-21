@@ -40,6 +40,28 @@ type configSnapshotMeshGateway struct {
 	ServiceGroups      map[string]structs.CheckServiceNodes
 	ServiceResolvers   map[string]*structs.ServiceResolverConfigEntry
 	GatewayGroups      map[string]structs.CheckServiceNodes
+	DatacenterConfigs  map[string]*structs.DatacenterConfig
+	ConsulServers      structs.CheckServiceNodes
+}
+
+func (c *configSnapshotMeshGateway) Datacenters() []string {
+	sz1, sz2 := len(c.GatewayGroups), len(c.DatacenterConfigs)
+
+	sz := sz1
+	if sz2 > sz1 {
+		sz = sz2
+	}
+
+	dcs := make([]string, 0, sz)
+	for dc, _ := range c.GatewayGroups {
+		dcs = append(dcs, dc)
+	}
+	for dc, _ := range c.DatacenterConfigs {
+		if _, ok := c.GatewayGroups[dc]; !ok {
+			dcs = append(dcs, dc)
+		}
+	}
+	return dcs
 }
 
 func (c *configSnapshotMeshGateway) IsEmpty() bool {
@@ -51,7 +73,9 @@ func (c *configSnapshotMeshGateway) IsEmpty() bool {
 		len(c.WatchedDatacenters) == 0 &&
 		len(c.ServiceGroups) == 0 &&
 		len(c.ServiceResolvers) == 0 &&
-		len(c.GatewayGroups) == 0
+		len(c.GatewayGroups) == 0 &&
+		len(c.DatacenterConfigs) == 0 &&
+		len(c.ConsulServers) == 0
 }
 
 // ConfigSnapshot captures all the resulting config needed for a proxy instance.
@@ -63,9 +87,11 @@ type ConfigSnapshot struct {
 	ProxyID         string
 	Address         string
 	Port            int
+	ServiceMeta     map[string]string
 	TaggedAddresses map[string]structs.ServiceAddress
 	Proxy           structs.ConnectProxyConfig
 	Datacenter      string
+	ServerSNIFn     ServerSNIFunc
 	Roots           *structs.IndexedCARoots
 
 	// connect-proxy specific
@@ -83,6 +109,11 @@ func (s *ConfigSnapshot) Valid() bool {
 	case structs.ServiceKindConnectProxy:
 		return s.Roots != nil && s.ConnectProxy.Leaf != nil
 	case structs.ServiceKindMeshGateway:
+		if s.ServiceMeta["wanfed"] == "1" {
+			if len(s.MeshGateway.ConsulServers) == 0 {
+				return false
+			}
+		}
 		return s.Roots != nil && (s.MeshGateway.WatchedServicesSet || len(s.MeshGateway.ServiceGroups) > 0)
 	default:
 		return false

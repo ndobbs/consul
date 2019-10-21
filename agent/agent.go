@@ -257,6 +257,12 @@ type Agent struct {
 	// attempts.
 	retryJoinCh chan error
 
+	// TODO
+	notifyRejoinWANCh chan struct{}
+
+	// TODO
+	primaryMeshGatewayRefreshCh chan error
+
 	// endpoints maps unique RPC endpoint names to common ones
 	// to allow overriding of RPC handlers since the golang
 	// net/rpc server does not allow this.
@@ -317,25 +323,26 @@ func New(c *config.RuntimeConfig, logger *log.Logger) (*Agent, error) {
 	}
 
 	a := Agent{
-		config:           c,
-		checkReapAfter:   make(map[types.CheckID]time.Duration),
-		checkMonitors:    make(map[types.CheckID]*checks.CheckMonitor),
-		checkTTLs:        make(map[types.CheckID]*checks.CheckTTL),
-		checkHTTPs:       make(map[types.CheckID]*checks.CheckHTTP),
-		checkTCPs:        make(map[types.CheckID]*checks.CheckTCP),
-		checkGRPCs:       make(map[types.CheckID]*checks.CheckGRPC),
-		checkDockers:     make(map[types.CheckID]*checks.CheckDocker),
-		checkAliases:     make(map[types.CheckID]*checks.CheckAlias),
-		eventCh:          make(chan serf.UserEvent, 1024),
-		eventBuf:         make([]*UserEvent, 256),
-		joinLANNotifier:  &systemd.Notifier{},
-		reloadCh:         make(chan chan error),
-		retryJoinCh:      make(chan error),
-		shutdownCh:       make(chan struct{}),
-		InterruptStartCh: make(chan struct{}),
-		endpoints:        make(map[string]string),
-		tokens:           new(token.Store),
-		logger:           logger,
+		config:                      c,
+		checkReapAfter:              make(map[types.CheckID]time.Duration),
+		checkMonitors:               make(map[types.CheckID]*checks.CheckMonitor),
+		checkTTLs:                   make(map[types.CheckID]*checks.CheckTTL),
+		checkHTTPs:                  make(map[types.CheckID]*checks.CheckHTTP),
+		checkTCPs:                   make(map[types.CheckID]*checks.CheckTCP),
+		checkGRPCs:                  make(map[types.CheckID]*checks.CheckGRPC),
+		checkDockers:                make(map[types.CheckID]*checks.CheckDocker),
+		checkAliases:                make(map[types.CheckID]*checks.CheckAlias),
+		eventCh:                     make(chan serf.UserEvent, 1024),
+		eventBuf:                    make([]*UserEvent, 256),
+		joinLANNotifier:             &systemd.Notifier{},
+		reloadCh:                    make(chan chan error),
+		retryJoinCh:                 make(chan error),
+		primaryMeshGatewayRefreshCh: make(chan error),
+		shutdownCh:                  make(chan struct{}),
+		InterruptStartCh:            make(chan struct{}),
+		endpoints:                   make(map[string]string),
+		tokens:                      new(token.Store),
+		logger:                      logger,
 	}
 	a.serviceManager = NewServiceManager(&a)
 
@@ -483,6 +490,7 @@ func (a *Agent) Start() error {
 			Datacenter: a.config.Datacenter,
 			Segment:    a.config.SegmentName,
 		},
+		TLSConfigurator: a.tlsConfigurator,
 	})
 	if err != nil {
 		return err
@@ -540,9 +548,17 @@ func (a *Agent) Start() error {
 		return err
 	}
 
+	a.notifyRejoinWANCh = make(chan struct{}, 1)
+
 	// start retry join
 	go a.retryJoinLAN()
 	go a.retryJoinWAN()
+
+	if a.config.ServerMode &&
+		a.config.PrimaryDatacenter != "" &&
+		a.config.PrimaryDatacenter != a.config.Datacenter {
+		go a.refreshPrimaryGatewayFallbackAddresses()
+	}
 
 	return nil
 }
@@ -555,7 +571,7 @@ func (a *Agent) setupClientAutoEncrypt() (*structs.SignedResponse, error) {
 	if err != nil && len(addrs) == 0 {
 		return nil, err
 	}
-	addrs = append(addrs, retryJoinAddrs(disco, "LAN", a.config.RetryJoinLAN, a.logger)...)
+	addrs = append(addrs, retryJoinAddrs(disco, retryJoinSerfVariant, "LAN", a.config.RetryJoinLAN, a.logger)...)
 
 	reply, priv, err := client.RequestAutoEncryptCerts(addrs, a.config.ServerPort, a.tokens.AgentToken(), a.InterruptStartCh)
 	if err != nil {
@@ -1078,6 +1094,8 @@ func (a *Agent) consulConfig() (*consul.Config, error) {
 	// todo(fs): or is there a reason to keep it like that?
 	base.Datacenter = a.config.Datacenter
 	base.PrimaryDatacenter = a.config.PrimaryDatacenter
+	base.PrimaryGateways = a.config.PrimaryGateways
+
 	base.DataDir = a.config.DataDir
 	base.NodeName = a.config.NodeName
 
@@ -1266,6 +1284,7 @@ func (a *Agent) consulConfig() (*consul.Config, error) {
 	// Copy the Connect CA bootstrap config
 	if a.config.ConnectEnabled {
 		base.ConnectEnabled = true
+		base.ConnectMeshGatewayWANFederationEnabled = a.config.ConnectMeshGatewayWANFederationEnabled
 
 		// Allow config to specify cluster_id provided it's a valid UUID. This is
 		// meant only for tests where a deterministic ID makes fixtures much simpler
@@ -1740,6 +1759,11 @@ func (a *Agent) RetryJoinCh() <-chan error {
 	return a.retryJoinCh
 }
 
+// TODO
+func (a *Agent) PrimaryMeshGatewayRefreshCh() <-chan error {
+	return a.primaryMeshGatewayRefreshCh
+}
+
 // ShutdownCh is used to return a channel that can be
 // selected to wait for the agent to perform a shutdown.
 func (a *Agent) ShutdownCh() <-chan struct{} {
@@ -1777,6 +1801,14 @@ func (a *Agent) JoinWAN(addrs []string) (n int, err error) {
 		a.logger.Printf("[WARN] agent: (WAN) couldn't join: %d Err: %v", n, err)
 	}
 	return
+}
+
+// TODO:
+func (a *Agent) RefreshPrimaryGatewayFallbackAddresses(addrs []string) (int, error) {
+	if srv, ok := a.delegate.(*consul.Server); ok {
+		return srv.RefreshPrimaryGatewayFallbackAddresses(addrs)
+	}
+	return 0, fmt.Errorf("Must be a server to track mesh gateways in the primary datacenter")
 }
 
 // ForceLeave is used to remove a failed node from the cluster
@@ -3949,6 +3981,14 @@ func (a *Agent) registerCache() {
 
 	a.cache.RegisterType(cachetype.ServiceHTTPChecksName, &cachetype.ServiceHTTPChecks{
 		Agent: a,
+	}, &cache.RegisterOptions{
+		Refresh:        true,
+		RefreshTimer:   0 * time.Second,
+		RefreshTimeout: 10 * time.Minute,
+	})
+
+	a.cache.RegisterType(cachetype.DatacenterConfigName, &cachetype.DatacenterConfig{
+		RPC: a,
 	}, &cache.RegisterOptions{
 		Refresh:        true,
 		RefreshTimer:   0 * time.Second,

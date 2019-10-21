@@ -7,9 +7,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hashicorp/consul/agent/consul/wanfed"
 	"github.com/hashicorp/consul/agent/metadata"
 	"github.com/hashicorp/consul/agent/structs"
 	"github.com/hashicorp/consul/lib"
+	"github.com/hashicorp/memberlist"
 	"github.com/hashicorp/raft"
 	"github.com/hashicorp/serf/serf"
 )
@@ -94,6 +96,34 @@ func (s *Server) setupSerf(conf *serf.Config, ch chan serf.Event, path string, w
 			nodeID:   s.config.NodeID,
 			nodeName: s.config.NodeName,
 			segment:  segment,
+		}
+	}
+
+	if wan {
+		nt, err := memberlist.NewNetTransport(&memberlist.NetTransportConfig{
+			BindAddrs: []string{conf.MemberlistConfig.BindAddr},
+			BindPort:  conf.MemberlistConfig.BindPort,
+			Logger:    conf.MemberlistConfig.Logger,
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		if s.config.ConnectMeshGatewayWANFederationEnabled {
+			mgwTransport, err := wanfed.NewTransport(
+				s.logger,
+				s.tlsConfigurator,
+				nt,
+				s.config.Datacenter,
+				s.gatewayLocator.PickGateway,
+			)
+			if err != nil {
+				return nil, err
+			}
+
+			conf.MemberlistConfig.Transport = mgwTransport
+		} else {
+			conf.MemberlistConfig.Transport = nt
 		}
 	}
 
@@ -286,7 +316,7 @@ func (s *Server) maybeBootstrap() {
 
 		// Retry with exponential backoff to get peer status from this server
 		for attempt := uint(0); attempt < maxPeerRetries; attempt++ {
-			if err := s.connPool.RPC(s.config.Datacenter, server.Addr, server.Version,
+			if err := s.connPool.RPC(s.config.Datacenter, server.ShortName, server.Addr, server.Version,
 				"Status.Peers", server.UseTLS, &structs.DCSpecificRequest{Datacenter: s.config.Datacenter}, &peers); err != nil {
 				nextRetry := time.Duration((1 << attempt) * peerRetryBase)
 				s.logger.Printf("[ERR] consul: Failed to confirm peer status for %s: %v. Retrying in "+

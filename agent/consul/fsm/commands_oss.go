@@ -36,6 +36,7 @@ func init() {
 	registerCommand(structs.ACLBindingRuleDeleteRequestType, (*FSM).applyACLBindingRuleDeleteOperation)
 	registerCommand(structs.ACLAuthMethodSetRequestType, (*FSM).applyACLAuthMethodSetOperation)
 	registerCommand(structs.ACLAuthMethodDeleteRequestType, (*FSM).applyACLAuthMethodDeleteOperation)
+	registerCommand(structs.DatacenterConfigRequestType, (*FSM).applyDatacenterConfigOperation)
 }
 
 func (c *FSM) applyRegister(buf []byte, index uint64) interface{} {
@@ -534,4 +535,27 @@ func (c *FSM) applyACLAuthMethodDeleteOperation(buf []byte, index uint64) interf
 		[]metrics.Label{{Name: "op", Value: "delete"}})
 
 	return c.state.ACLAuthMethodBatchDelete(index, req.AuthMethodNames, &req.EnterpriseMeta)
+}
+
+func (c *FSM) applyDatacenterConfigOperation(buf []byte, index uint64) interface{} {
+	var req structs.DatacenterConfigRequest
+	if err := structs.Decode(buf, &req); err != nil {
+		panic(fmt.Errorf("failed to decode request: %v", err))
+	}
+
+	switch req.Op {
+	case structs.DatacenterConfigUpsert:
+		defer metrics.MeasureSinceWithLabels([]string{"fsm", "datacenter_config", req.Config.Datacenter}, time.Now(),
+			[]metrics.Label{{Name: "op", Value: "upsert"}})
+		if err := c.state.DatacenterConfigSet(index, req.Config); err != nil {
+			return err
+		}
+		return true
+	case structs.DatacenterConfigDelete:
+		defer metrics.MeasureSinceWithLabels([]string{"fsm", "datacenter_config", req.Config.Datacenter}, time.Now(),
+			[]metrics.Label{{Name: "op", Value: "delete"}})
+		return c.state.DatacenterConfigDelete(index, req.Config.Datacenter)
+	default:
+		return fmt.Errorf("invalid datacenter config operation type: %v", req.Op)
+	}
 }

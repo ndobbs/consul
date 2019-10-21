@@ -243,6 +243,7 @@ func TestFSM_SnapshotRestore_OSS(t *testing.T) {
 	require.NoError(fsm.state.EnsureConfigEntry(18, serviceConfig))
 	require.NoError(fsm.state.EnsureConfigEntry(19, proxyConfig))
 
+	// Raft Chunking
 	chunkState := &raftchunking.State{
 		ChunkMap: make(raftchunking.ChunkMap),
 	}
@@ -272,6 +273,110 @@ func TestFSM_SnapshotRestore_OSS(t *testing.T) {
 	}
 	err = fsm.chunker.RestoreState(chunkState)
 	require.NoError(err)
+
+	// Datacenter configs
+	dcConfig1 := &structs.DatacenterConfig{
+		Datacenter: "dc1",
+		MeshGateways: []structs.CheckServiceNode{
+			{
+				Node: &structs.Node{
+					ID:         "664bac9f-4de7-4f1b-ad35-0e5365e8f329",
+					Node:       "gateway1",
+					Datacenter: "dc1",
+					Address:    "1.2.3.4",
+				},
+				Service: &structs.NodeService{
+					ID:      "mesh-gateway",
+					Service: "mesh-gateway",
+					Kind:    structs.ServiceKindMeshGateway,
+					Port:    1111,
+					Meta:    map[string]string{"wanfed": "1"},
+				},
+				Checks: []*structs.HealthCheck{
+					{
+						Name:      "web connectivity",
+						Status:    api.HealthPassing,
+						ServiceID: "mesh-gateway",
+					},
+				},
+			},
+			{
+				Node: &structs.Node{
+					ID:         "3fb9a696-8209-4eee-a1f7-48600deb9716",
+					Node:       "gateway2",
+					Datacenter: "dc1",
+					Address:    "9.8.7.6",
+				},
+				Service: &structs.NodeService{
+					ID:      "mesh-gateway",
+					Service: "mesh-gateway",
+					Kind:    structs.ServiceKindMeshGateway,
+					Port:    2222,
+					Meta:    map[string]string{"wanfed": "1"},
+				},
+				Checks: []*structs.HealthCheck{
+					{
+						Name:      "web connectivity",
+						Status:    api.HealthPassing,
+						ServiceID: "mesh-gateway",
+					},
+				},
+			},
+		},
+		UpdatedAt: time.Now().UTC(),
+	}
+	dcConfig2 := &structs.DatacenterConfig{
+		Datacenter: "dc2",
+		MeshGateways: []structs.CheckServiceNode{
+			{
+				Node: &structs.Node{
+					ID:         "0f92b02e-9f51-4aa2-861b-4ddbc3492724",
+					Node:       "gateway1",
+					Datacenter: "dc2",
+					Address:    "8.8.8.8",
+				},
+				Service: &structs.NodeService{
+					ID:      "mesh-gateway",
+					Service: "mesh-gateway",
+					Kind:    structs.ServiceKindMeshGateway,
+					Port:    3333,
+					Meta:    map[string]string{"wanfed": "1"},
+				},
+				Checks: []*structs.HealthCheck{
+					{
+						Name:      "web connectivity",
+						Status:    api.HealthPassing,
+						ServiceID: "mesh-gateway",
+					},
+				},
+			},
+			{
+				Node: &structs.Node{
+					ID:         "99a76121-1c3f-4023-88ef-805248beb10b",
+					Node:       "gateway2",
+					Datacenter: "dc2",
+					Address:    "5.5.5.5",
+				},
+				Service: &structs.NodeService{
+					ID:      "mesh-gateway",
+					Service: "mesh-gateway",
+					Kind:    structs.ServiceKindMeshGateway,
+					Port:    4444,
+					Meta:    map[string]string{"wanfed": "1"},
+				},
+				Checks: []*structs.HealthCheck{
+					{
+						Name:      "web connectivity",
+						Status:    api.HealthPassing,
+						ServiceID: "mesh-gateway",
+					},
+				},
+			},
+		},
+		UpdatedAt: time.Now().UTC(),
+	}
+	require.NoError(fsm.state.DatacenterConfigSet(21, dcConfig1))
+	require.NoError(fsm.state.DatacenterConfigSet(22, dcConfig2))
 
 	// Snapshot
 	snap, err := fsm.Snapshot()
@@ -490,6 +595,14 @@ func TestFSM_SnapshotRestore_OSS(t *testing.T) {
 	newChunkState, err := fsm2.chunker.CurrentState()
 	require.NoError(err)
 	assert.Equal(newChunkState, chunkState)
+
+	// Verify datacenter configs are restored.
+	_, dcConfigLoaded1, err := fsm2.state.DatacenterConfigGet(nil, "dc1")
+	require.NoError(err)
+	assert.Equal(dcConfig1, dcConfigLoaded1)
+	_, dcConfigLoaded2, err := fsm2.state.DatacenterConfigGet(nil, "dc2")
+	require.NoError(err)
+	assert.Equal(dcConfig2, dcConfigLoaded2)
 
 	// Snapshot
 	snap, err = fsm2.Snapshot()

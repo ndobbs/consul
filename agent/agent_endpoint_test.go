@@ -1428,7 +1428,8 @@ func TestAgent_Join_WAN(t *testing.T) {
 	testrpc.WaitForLeader(t, a2.RPC, "dc1")
 
 	addr := fmt.Sprintf("127.0.0.1:%d", a2.Config.SerfPortWAN)
-	req, _ := http.NewRequest("PUT", fmt.Sprintf("/v1/agent/join/%s?wan=true", addr), nil)
+	name := fmt.Sprintf("%s.%s", a2.Config.NodeName, a2.Config.Datacenter)
+	req, _ := http.NewRequest("PUT", fmt.Sprintf("/v1/agent/join/%s?wan=true&name=%s", addr, url.QueryEscape(name)), nil)
 	obj, err := a1.srv.AgentJoin(nil, req)
 	if err != nil {
 		t.Fatalf("Err: %v", err)
@@ -5057,7 +5058,8 @@ func TestAgentConnectCALeafCert_secondaryDC_good(t *testing.T) {
 
 	// Wait for the WAN join.
 	addr := fmt.Sprintf("127.0.0.1:%d", a1.Config.SerfPortWAN)
-	_, err := a2.JoinWAN([]string{addr})
+	name := fmt.Sprintf("%s.%s", a1.Config.NodeName, a1.Config.Datacenter)
+	_, err := a2.JoinWAN([]string{name + "/" + addr})
 	require.NoError(err)
 
 	testrpc.WaitForLeader(t, a1.RPC, "dc1")

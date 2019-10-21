@@ -68,7 +68,7 @@ func (m *LeaderRoutineManager) StartWithContext(parentCtx context.Context, name 
 	go func() {
 		err := routine(ctx)
 		if err != nil && err != context.DeadlineExceeded && err != context.Canceled {
-			m.logger.Printf("[ERROR] leader: %s routine exited with error: %v", name, err)
+			m.logger.Printf("[ERR] leader: %s routine exited with error: %v", name, err)
 		} else {
 			m.logger.Printf("[DEBUG] leader: stopped %s routine", name)
 		}

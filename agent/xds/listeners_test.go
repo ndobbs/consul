@@ -225,6 +225,10 @@ func TestListenersFromSnapshot(t *testing.T) {
 			create: proxycfg.TestConfigSnapshotMeshGateway,
 		},
 		{
+			name:   "mesh-gateway-using-dc-configs",
+			create: proxycfg.TestConfigSnapshotMeshGatewayUsingDatacenterConfigs,
+		},
+		{
 			name:   "mesh-gateway-no-services",
 			create: proxycfg.TestConfigSnapshotMeshGatewayNoServices,
 		},

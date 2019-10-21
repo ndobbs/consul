@@ -139,7 +139,7 @@ func TestAPI_AgentMembersOpts(t *testing.T) {
 
 	agent := c.Agent()
 
-	s2.JoinWAN(t, s1.WANAddr)
+	s2.JoinWANWithName(t, s1.Config.NodeName+"."+s1.Config.Datacenter, s1.WANAddr)
 
 	members, err := agent.MembersOpts(MembersOpts{WAN: true})
 	if err != nil {

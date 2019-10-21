@@ -871,6 +871,9 @@ default will automatically work with some tooling.
       Connect features are enabled on this agent. Should be enabled on all clients and
       servers in the cluster in order for Connect to function properly. Defaults to false.
 
+    * <a name="connect_enable_mesh_gateway_wan_federation"></a><a href="#connect_enable_mesh_gateway_wan_federation">`enable_mesh_gateway_wan_federation`</a> TODO
+      Defaults to false.
+
     * <a name="connect_ca_provider"></a><a href="#connect_ca_provider">`ca_provider`</a> Controls
       which CA provider to use for Connect's CA. Currently only the `consul` and `vault` providers
       are supported. This is only used when initially bootstrapping the cluster. For an existing

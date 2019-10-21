@@ -561,6 +561,9 @@ type RuntimeConfig struct {
 	// ConnectCAConfig is the config to use for the CA provider.
 	ConnectCAConfig map[string]interface{}
 
+	// TODO
+	ConnectMeshGatewayWANFederationEnabled bool
+
 	// ConnectTestCALeafRootChangeSpread is used to control how long the CA leaf
 	// cache with spread CSRs over when a root change occurs. For now we don't
 	// expose this in public config intentionally but could later with a rename.
@@ -882,6 +885,9 @@ type RuntimeConfig struct {
 	//
 	// hcl: primary_datacenter = string
 	PrimaryDatacenter string
+
+	// TODO:
+	PrimaryGateways []string
 
 	// RPCAdvertiseAddr is the TCP address Consul advertises for its RPC endpoint.
 	// By default this is the bind address on the default RPC Server port. If the
@@ -1478,6 +1484,10 @@ type RuntimeConfig struct {
 	// ]
 	//
 	Watches []map[string]interface{}
+}
+
+func (c *RuntimeConfig) WANNodeName() string {
+	return fmt.Sprintf("%s.%s", c.NodeName, c.Datacenter)
 }
 
 func (c *RuntimeConfig) apiAddresses(maxPerType int) (unixAddrs, httpAddrs, httpsAddrs []string) {

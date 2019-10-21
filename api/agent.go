@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 )
 
 // ServiceKind is the kind of service being registered.
@@ -697,9 +698,16 @@ func (a *Agent) CheckDeregister(checkID string) error {
 // Join is used to instruct the agent to attempt a join to
 // another cluster member
 func (a *Agent) Join(addr string, wan bool) error {
+	name := ""
+	if idx := strings.Index(addr, "/"); idx > 0 {
+		name, addr = addr[0:idx], addr[idx+1:]
+	}
 	r := a.c.newRequest("PUT", "/v1/agent/join/"+addr)
 	if wan {
 		r.params.Set("wan", "1")
+	}
+	if name != "" {
+		r.params.Set("name", name)
 	}
 	_, resp, err := requireOK(a.c.doRequest(r))
 	if err != nil {

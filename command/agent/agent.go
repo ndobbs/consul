@@ -238,6 +238,9 @@ func (c *cmd) run(args []string) int {
 		config.HTTPPort, config.HTTPSPort, config.GRPCPort, config.DNSPort))
 	c.UI.Info(fmt.Sprintf("  Cluster Addr: %v (LAN: %d, WAN: %d)", config.AdvertiseAddrLAN,
 		config.SerfPortLAN, config.SerfPortWAN))
+	if config.ServerMode {
+		c.UI.Info(fmt.Sprintf("  Server Ports: (RPC: %d)", config.ServerPort))
+	}
 	c.UI.Info(fmt.Sprintf("       Encrypt: Gossip: %v, TLS-Outgoing: %v, TLS-Incoming: %v, Auto-Encrypt-TLS: %t",
 		config.EncryptKey != "", config.VerifyOutgoing, config.VerifyIncoming, config.AutoEncryptTLS || config.AutoEncryptAllowTLS))
 
@@ -330,6 +333,9 @@ func (c *cmd) run(args []string) int {
 			sig = os.Interrupt
 		case err := <-agent.RetryJoinCh():
 			c.logger.Println("[ERR] agent: Retry join failed: ", err)
+			return 1
+		case err := <-agent.PrimaryMeshGatewayRefreshCh():
+			c.logger.Println("[ERR] agent: Refreshing primary mesh gateway fallback addresses failed: ", err)
 			return 1
 		case <-agent.ShutdownCh():
 			// agent is already down!

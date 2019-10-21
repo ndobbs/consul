@@ -2,7 +2,6 @@ package agent
 
 import (
 	"fmt"
-	"github.com/hashicorp/consul/testrpc"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -12,6 +11,7 @@ import (
 	"github.com/hashicorp/consul/agent"
 	"github.com/hashicorp/consul/sdk/testutil"
 	"github.com/hashicorp/consul/sdk/testutil/retry"
+	"github.com/hashicorp/consul/testrpc"
 	"github.com/mitchellh/cli"
 )
 
@@ -82,9 +82,13 @@ func TestRetryJoin(t *testing.T) {
 	a := agent.NewTestAgent(t, t.Name(), "")
 	defer a.Shutdown()
 
+	wanJoin := fmt.Sprintf("%s.%s/%s",
+		a.Config.NodeName, a.Config.Datacenter, a.Config.SerfBindAddrWAN.String(),
+	)
+
 	b := agent.NewTestAgent(t, t.Name(), `
 		retry_join = ["`+a.Config.SerfBindAddrLAN.String()+`"]
-		retry_join_wan = ["`+a.Config.SerfBindAddrWAN.String()+`"]
+		retry_join_wan = ["`+wanJoin+`"]
 		retry_interval = "100ms"
 	`)
 	defer b.Shutdown()

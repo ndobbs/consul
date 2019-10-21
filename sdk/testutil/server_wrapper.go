@@ -24,8 +24,12 @@ func (w *WrappedServer) JoinLAN(addr string) {
 	w.s.JoinLAN(w.t, addr)
 }
 
-func (w *WrappedServer) JoinWAN(addr string) {
+func (w *WrappedServer) JoinWAN(name, addr string) {
 	w.s.JoinWAN(w.t, addr)
+}
+
+func (w *WrappedServer) JoinWANWithName(name, addr string) {
+	w.s.JoinWANWithName(w.t, name, addr)
 }
 
 func (w *WrappedServer) SetKV(key string, val []byte) {

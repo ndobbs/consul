@@ -79,6 +79,26 @@ func logConn(conn net.Conn) string {
 // handleConn is used to determine if this is a Raft or
 // Consul type RPC connection and invoke the correct handler
 func (s *Server) handleConn(conn net.Conn, isTLS bool) {
+	if !isTLS && s.tlsConfigurator.MutualTLSCapable() {
+		// See if actually this is native TLS multiplexed onto the old
+		// "type-byte" system.
+
+		peekedConn, nativeTLS, err := pool.PeekForTLS(conn)
+		if err != nil {
+			if err != io.EOF {
+				s.logger.Printf("[ERR] consul.rpc: failed to read first byte: %v %s", err, logConn(conn))
+			}
+			conn.Close()
+			return
+		}
+
+		if nativeTLS {
+			s.handleNativeTLS(peekedConn)
+			return
+		}
+		conn = peekedConn
+	}
+
 	// Read a single byte
 	buf := make([]byte, 1)
 	if _, err := conn.Read(buf); err != nil {
@@ -123,6 +143,63 @@ func (s *Server) handleConn(conn net.Conn, isTLS bool) {
 	default:
 		if !s.handleEnterpriseRPCConn(typ, conn, isTLS) {
 			s.logger.Printf("[ERR] consul.rpc: unrecognized RPC byte: %v %s", typ, logConn(conn))
+			conn.Close()
+		}
+	}
+}
+
+func (s *Server) handleNativeTLS(conn net.Conn) {
+	s.logger.Printf("[TRACE] consul.rpc: detected actual TLS over RPC port: %s", logConn(conn))
+
+	tlscfg := s.tlsConfigurator.IncomingALPNRPCConfig(pool.RPCNextProtos)
+	tlsConn := tls.Server(conn, tlscfg)
+
+	// Force the handshake to conclude.
+	if err := tlsConn.Handshake(); err != nil {
+		s.logger.Printf("[ERR] consul.rpc: TLS handshake failed: %v", err)
+		conn.Close()
+		return
+	}
+
+	var (
+		cs        = tlsConn.ConnectionState()
+		sni       = cs.ServerName
+		nextProto = cs.NegotiatedProtocol
+
+		transport = s.memberlistTransportWAN
+	)
+
+	s.logger.Printf("[TRACE] consul.rpc: accepted nativeTLS RPC for sni=%q proto=%q", sni, nextProto)
+
+	switch nextProto {
+	case pool.ALPN_RPCConsul:
+		s.handleConsulConn(tlsConn)
+
+	case pool.ALPN_RPCRaft:
+		metrics.IncrCounter([]string{"rpc", "raft_handoff"}, 1)
+		s.raftLayer.Handoff(tlsConn)
+
+	case pool.ALPN_RPCMultiplexV2:
+		s.handleMultiplexV2(tlsConn)
+
+	case pool.ALPN_RPCSnapshot:
+		s.handleSnapshotConn(tlsConn)
+
+	case pool.ALPN_WANGossipPacket:
+		// No need to defer the conn.Close() here, the Ingest methods do that.
+		if err := transport.IngestPacket(tlsConn, tlsConn.RemoteAddr(), time.Now()); err != nil {
+			s.logger.Printf("[ERR] consul.rpc: failed to ingest rpc sni=%q proto=%q: %v", sni, nextProto, err)
+		}
+
+	case pool.ALPN_WANGossipStream:
+		// No need to defer the conn.Close() here, the Ingest methods do that.
+		if err := transport.IngestStream(tlsConn); err != nil {
+			s.logger.Printf("[ERR] consul.rpc: failed to ingest rpc sni=%q proto=%q: %v", sni, nextProto, err)
+		}
+
+	default:
+		if !s.handleEnterpriseNativeTLSConn(nextProto, conn) {
+			s.logger.Printf("[ERR] consul.rpc: discarding RPC for unknown negotiated protocol %q: %s", nextProto, logConn(conn))
 			conn.Close()
 		}
 	}
@@ -262,7 +339,7 @@ CHECK_LEADER:
 	// Handle the case of a known leader
 	rpcErr := structs.ErrNoLeader
 	if leader != nil {
-		rpcErr = s.connPool.RPC(s.config.Datacenter, leader.Addr,
+		rpcErr = s.connPool.RPC(s.config.Datacenter, leader.ShortName, leader.Addr,
 			leader.Version, method, leader.UseTLS, args, reply)
 		if rpcErr != nil && canRetry(info, rpcErr) {
 			goto RETRY
@@ -325,7 +402,7 @@ func (s *Server) forwardDC(method, dc string, args interface{}, reply interface{
 
 	metrics.IncrCounterWithLabels([]string{"rpc", "cross-dc"}, 1,
 		[]metrics.Label{{Name: "datacenter", Value: dc}})
-	if err := s.connPool.RPC(dc, server.Addr, server.Version, method, server.UseTLS, args, reply); err != nil {
+	if err := s.connPool.RPC(dc, server.ShortName, server.Addr, server.Version, method, server.UseTLS, args, reply); err != nil {
 		manager.NotifyFailedServer(server)
 		s.logger.Printf("[ERR] consul: RPC failed to server %s in DC %q: %v", server.Addr, dc, err)
 		return err

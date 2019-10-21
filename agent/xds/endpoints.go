@@ -150,19 +150,72 @@ func (s *Server) endpointsFromSnapshotConnectProxy(cfgSnap *proxycfg.ConfigSnaps
 }
 
 func (s *Server) endpointsFromSnapshotMeshGateway(cfgSnap *proxycfg.ConfigSnapshot, token string) ([]proto.Message, error) {
-	resources := make([]proto.Message, 0, len(cfgSnap.MeshGateway.GatewayGroups)+len(cfgSnap.MeshGateway.ServiceGroups))
+	datacenters := cfgSnap.MeshGateway.Datacenters()
+	resources := make([]proto.Message, 0, len(datacenters)+len(cfgSnap.MeshGateway.ServiceGroups))
 
 	// generate the endpoints for the gateways in the remote datacenters
-	for dc, endpoints := range cfgSnap.MeshGateway.GatewayGroups {
-		clusterName := connect.DatacenterSNI(dc, cfgSnap.Roots.TrustDomain)
-		la := makeLoadAssignment(
-			clusterName,
-			[]loadAssignmentEndpointGroup{
-				{Endpoints: endpoints},
-			},
-			cfgSnap.Datacenter,
-		)
-		resources = append(resources, la)
+	for _, dc := range datacenters {
+		endpoints, ok := cfgSnap.MeshGateway.GatewayGroups[dc]
+		if !ok {
+			dcConfig, ok := cfgSnap.MeshGateway.DatacenterConfigs[dc]
+			if !ok { // not possible
+				s.Logger.Printf("[ERR] xds: skipping mesh gateway endpoints in dc %q because no definition found", dc)
+				continue
+			}
+			endpoints = dcConfig.MeshGateways
+		}
+
+		{ // standard connect
+			clusterName := connect.DatacenterSNI(dc, cfgSnap.Roots.TrustDomain)
+
+			la := makeLoadAssignment(
+				clusterName,
+				[]loadAssignmentEndpointGroup{
+					{Endpoints: endpoints},
+				},
+				cfgSnap.Datacenter,
+			)
+			resources = append(resources, la)
+		}
+
+		if cfgSnap.ServiceMeta["wanfed"] == "1" && cfgSnap.ServerSNIFn != nil {
+			clusterName := cfgSnap.ServerSNIFn(dc, "")
+
+			la := makeLoadAssignment(
+				clusterName,
+				[]loadAssignmentEndpointGroup{
+					{Endpoints: endpoints},
+				},
+				cfgSnap.Datacenter,
+			)
+			resources = append(resources, la)
+		}
+	}
+
+	if cfgSnap.ServiceMeta["wanfed"] == "1" && cfgSnap.ServerSNIFn != nil {
+		// generate endpoints for our servers
+
+		for _, srv := range cfgSnap.MeshGateway.ConsulServers {
+			clusterName := cfgSnap.ServerSNIFn(cfgSnap.Datacenter, srv.Node.Node)
+
+			addr, port := srv.BestAddress(false /*wan*/)
+
+			cla := &envoy.ClusterLoadAssignment{
+				ClusterName: clusterName,
+				Endpoints: []envoyendpoint.LocalityLbEndpoints{{
+					LbEndpoints: []envoyendpoint.LbEndpoint{{
+						HostIdentifier: &envoyendpoint.LbEndpoint_Endpoint{
+							Endpoint: &envoyendpoint.Endpoint{
+								Address: makeAddressPtr(addr, port),
+							},
+						},
+						HealthStatus: envoycore.HealthStatus_UNKNOWN,
+					}},
+				}},
+			}
+
+			resources = append(resources, cla)
+		}
 	}
 
 	// generate the endpoints for the local service groups
@@ -307,6 +360,8 @@ func makeLoadAssignmentEndpointGroup(
 			OnlyPassing: target.Subset.OnlyPassing,
 		}, true
 	}
+
+	// TODO(rb): shouldn't we omit gateways that are unhealthy?
 
 	// If using a mesh gateway we need to pull those endpoints instead.
 	gatewayEndpoints, ok := gatewayHealth[gatewayDatacenter]

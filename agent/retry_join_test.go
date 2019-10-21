@@ -46,13 +46,13 @@ func TestAgentRetryJoinAddrs(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			var buf bytes.Buffer
 			logger := log.New(&buf, "logger: ", log.Lshortfile)
-			require.Equal(t, test.expected, retryJoinAddrs(d, "LAN", test.input, logger), buf.String())
+			require.Equal(t, test.expected, retryJoinAddrs(d, retryJoinSerfVariant, "LAN", test.input, logger), buf.String())
 			if i == 4 {
 				require.Contains(t, buf.String(), `Using provider "aws"`)
 			}
 		})
 	}
 	t.Run("handles nil discover", func(t *testing.T) {
-		require.Equal(t, []string{}, retryJoinAddrs(nil, "LAN", []string{"a"}, nil))
+		require.Equal(t, []string{}, retryJoinAddrs(nil, retryJoinSerfVariant, "LAN", []string{"a"}, nil))
 	})
 }

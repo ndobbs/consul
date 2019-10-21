@@ -40,7 +40,7 @@ func TestStatusLeaderSecondary(t *testing.T) {
 	a1SerfAddr := fmt.Sprintf("127.0.0.1:%d", a1.Config.SerfPortWAN)
 	a1Addr := fmt.Sprintf("127.0.0.1:%d", a1.Config.ServerPort)
 	a2Addr := fmt.Sprintf("127.0.0.1:%d", a2.Config.ServerPort)
-	_, err := a2.JoinWAN([]string{a1SerfAddr})
+	_, err := a2.JoinWAN([]string{a1.Config.NodeName + "." + a1.Config.Datacenter + "/" + a1SerfAddr})
 	require.NoError(t, err)
 
 	retry.Run(t, func(r *retry.R) {
@@ -96,7 +96,7 @@ func TestStatusPeersSecondary(t *testing.T) {
 	a1SerfAddr := fmt.Sprintf("127.0.0.1:%d", a1.Config.SerfPortWAN)
 	a1Addr := fmt.Sprintf("127.0.0.1:%d", a1.Config.ServerPort)
 	a2Addr := fmt.Sprintf("127.0.0.1:%d", a2.Config.ServerPort)
-	_, err := a2.JoinWAN([]string{a1SerfAddr})
+	_, err := a2.JoinWAN([]string{a1.Config.NodeName + "." + a1.Config.Datacenter + "/" + a1SerfAddr})
 	require.NoError(t, err)
 
 	retry.Run(t, func(r *retry.R) {

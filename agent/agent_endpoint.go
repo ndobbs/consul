@@ -401,10 +401,16 @@ func (s *HTTPServer) AgentJoin(resp http.ResponseWriter, req *http.Request) (int
 
 	// Get the address
 	addr := strings.TrimPrefix(req.URL.Path, "/v1/agent/join/")
+
+	joinAddr := addr
+	if name := req.URL.Query().Get("name"); name != "" {
+		joinAddr = name + "/" + addr
+	}
+
 	if wan {
-		_, err = s.agent.JoinWAN([]string{addr})
+		_, err = s.agent.JoinWAN([]string{joinAddr})
 	} else {
-		_, err = s.agent.JoinLAN([]string{addr})
+		_, err = s.agent.JoinLAN([]string{joinAddr})
 	}
 	return nil, err
 }
