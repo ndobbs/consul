@@ -32,6 +32,10 @@ github.com/hashicorp/golang-lru v0.5.0 h1:CL2msUPvZTLb5O648aiLNJw3hnBxN2+1Jq8rCO
 github.com/hashicorp/golang-lru v0.5.0/go.mod h1:/m3WP610KZHVQ1SGc6re/UDhFvYD7pJ4Ao+sR/qLZy8=
 github.com/hashicorp/logutils v1.0.0/go.mod h1:QIAnNjmIWmVIIkWDTG1z5v++HQmx9WQRO+LraFDTW64=
 github.com/hashicorp/mdns v1.0.0/go.mod h1:tL+uN++7HEJ6SQLQ2/p+z2pH24WQKWjBPkE0mNTz8vQ=
+github.com/hashicorp/memberlist v0.1.6-0.20191125161800-f50e0760d9d7 h1:QOQk1CvBUcpZ7pI9MQpVeClj60WxM08IsGm6J2tQqkY=
+github.com/hashicorp/memberlist v0.1.6-0.20191125161800-f50e0760d9d7/go.mod h1:5VDNHjqFMgEcclnwmkCnC99IPwxBmIsxwY8qn+Nl0H4=
+github.com/hashicorp/serf v0.8.6-0.20191204223217-6a0cd4c66246 h1:Pj7z5GeHwRoWi5A4tFZzXvjXbgs58CDRBtgZTU1+H8E=
+github.com/hashicorp/serf v0.8.6-0.20191204223217-6a0cd4c66246/go.mod h1:taddkz/ygOpSWMBGvMoGa6Q51ic+Xv3kLBRM81X/f1c=
 github.com/mattn/go-colorable v0.0.9/go.mod h1:9vuHe8Xs5qXnSaW/c/ABM9alt+Vo+STaOChaDxuIBZU=
 github.com/mattn/go-isatty v0.0.3/go.mod h1:M+lRXTBqGeGNdLjl/ufCoiOlB5xdOkqRJdNxMWT7Zi4=
 github.com/miekg/dns v1.0.14 h1:9jZdLNd/P4+SfEJ0TNyxYpsK8N4GtfylBLqtbYN1sbA=
