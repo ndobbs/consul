@@ -1148,14 +1148,8 @@ func (s *Server) handleAliveMember(member serf.Member) error {
 				"serf_protocol_min":     strconv.FormatUint(uint64(member.ProtocolMin), 10),
 				"serf_protocol_max":     strconv.FormatUint(uint64(member.ProtocolMax), 10),
 				"version":               parts.Build.String(),
-				// TODO: put the rest of the fun ports here
 			},
 		}
-
-		for k, v := range member.Tags {
-			service.Meta["serftag_"+k] = v
-		}
-
 		// Attempt to join the consul server
 		if err := s.joinConsulServer(member, parts); err != nil {
 			return err
