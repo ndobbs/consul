@@ -30,6 +30,14 @@ type GatewayLocator struct {
 	gatewaysLock    sync.Mutex
 	primaryGateways []string // WAN addrs
 	localGateways   []string // LAN addrs
+
+	// This will be closed the FIRST time we get some gateways populated
+	primaryGatewaysReadyCh chan struct{}
+}
+
+// TODO : this will be closed when dc configs ship back at least one primary mgw (does not count fallback)
+func (g *GatewayLocator) PrimaryMeshGatewayAddressesReadyCh() <-chan struct{} {
+	return g.primaryGatewaysReadyCh
 }
 
 func (g *GatewayLocator) PickGateway(dc string) string {
@@ -85,10 +93,11 @@ func NewGatewayLocator(
 	primaryDatacenter string,
 ) *GatewayLocator {
 	return &GatewayLocator{
-		logger:            logger,
-		srv:               srv,
-		datacenter:        datacenter,
-		primaryDatacenter: primaryDatacenter,
+		logger:                 logger,
+		srv:                    srv,
+		datacenter:             datacenter,
+		primaryDatacenter:      primaryDatacenter,
+		primaryGatewaysReadyCh: make(chan struct{}),
 	}
 }
 
@@ -173,8 +182,10 @@ func (g *GatewayLocator) updateFromState(results []*structs.DatacenterConfig) {
 	defer g.gatewaysLock.Unlock()
 
 	changed := false
+	primaryReady := false
 	if !lib.StringSliceEqual(g.primaryGateways, primaryAddrs) {
 		g.primaryGateways = primaryAddrs
+		primaryReady = len(g.primaryGateways) > 0
 		changed = true
 	}
 	if !lib.StringSliceEqual(g.localGateways, localAddrs) {
@@ -184,6 +195,12 @@ func (g *GatewayLocator) updateFromState(results []*structs.DatacenterConfig) {
 
 	if changed {
 		g.logger.Printf("[DEBUG] consul.gatewayLocator: new cached locations of mesh gateways: primary=%v local=%v", primaryAddrs, localAddrs)
+	}
+
+	if primaryReady {
+		if _, open := <-g.primaryGatewaysReadyCh; open {
+			close(g.primaryGatewaysReadyCh)
+		}
 	}
 }
 

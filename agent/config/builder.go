@@ -628,6 +628,11 @@ func (b *Builder) Build() (rt RuntimeConfig, err error) {
 		aclsEnabled = b.boolVal(c.ACL.Enabled)
 	}
 
+	// TODO(rb): fix this after figuring out which tests are super broken
+	// if primaryDatacenter == "" {
+	// 	primaryDatacenter = datacenter
+	// }
+
 	aclDC := primaryDatacenter
 	if aclsEnabled && aclDC == "" {
 		aclDC = datacenter
@@ -874,6 +879,7 @@ func (b *Builder) Build() (rt RuntimeConfig, err error) {
 		RejoinAfterLeave:                       b.boolVal(c.RejoinAfterLeave),
 		RetryJoinIntervalLAN:                   b.durationVal("retry_interval", c.RetryJoinIntervalLAN),
 		RetryJoinIntervalWAN:                   b.durationVal("retry_interval_wan", c.RetryJoinIntervalWAN),
+		PrimaryGatewaysInterval:                b.durationVal("primary_gateways_interval", c.PrimaryGatewaysInterval),
 		RetryJoinLAN:                           b.expandAllOptionalAddrs("retry_join", c.RetryJoinLAN),
 		RetryJoinMaxAttemptsLAN:                b.intVal(c.RetryJoinMaxAttemptsLAN),
 		RetryJoinMaxAttemptsWAN:                b.intVal(c.RetryJoinMaxAttemptsWAN),

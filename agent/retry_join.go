@@ -26,18 +26,26 @@ func (a *Agent) retryJoinLAN() {
 	}
 }
 
-func (a *Agent) retryJoinWAN() {
+func (a *Agent) retryJoinWAN(primary bool) {
+	if !a.config.ServerMode {
+		a.logger.Printf("[WARN] agent: (WAN) couldn't join: Err: Must be a server to join WAN cluster")
+		return
+	}
+
+	if !primary && a.config.ConnectEnabled && a.config.ConnectMeshGatewayWANFederationEnabled {
+		a.refreshPrimaryGatewayFallbackAddresses()
+	}
+
 	// TODO: how to intersect go-discover with the gateway stuff? Maybe we change this to use a composite syntax
 	// TODO: how to force a rejoin after it accidentally just joins itself?
 	r := &retryJoiner{
-		variant:      retryJoinSerfVariant,
-		cluster:      "WAN",
-		addrs:        a.config.RetryJoinWAN,
-		maxAttempts:  a.config.RetryJoinMaxAttemptsWAN,
-		interval:     a.config.RetryJoinIntervalWAN,
-		join:         a.JoinWAN,
-		logger:       a.logger,
-		notifyRejoin: a.notifyRejoinWANCh,
+		variant:     retryJoinSerfVariant,
+		cluster:     "WAN",
+		addrs:       a.config.RetryJoinWAN,
+		maxAttempts: a.config.RetryJoinMaxAttemptsWAN,
+		interval:    a.config.RetryJoinIntervalWAN,
+		join:        a.JoinWAN,
+		logger:      a.logger,
 	}
 	if err := r.retryJoin(); err != nil {
 		a.retryJoinCh <- err
@@ -45,30 +53,18 @@ func (a *Agent) retryJoinWAN() {
 }
 
 func (a *Agent) refreshPrimaryGatewayFallbackAddresses() {
-	comboFn := func(addrs []string) (int, error) {
-		n, err := a.RefreshPrimaryGatewayFallbackAddresses(addrs)
-		if err == nil {
-			select {
-			case a.notifyRejoinWANCh <- struct{}{}:
-			default:
-				// Don't block if it's already been notified.
-			}
-		}
-		return n, err
-	}
-
 	r := &retryJoiner{
-		variant: retryJoinMeshGatewayVariant,
-		cluster: "primary",
-		addrs:   a.config.PrimaryGateways,
-		// TODO: make these configurable
-		maxAttempts: 0,                // s.config.RetryJoinMaxAttemptsWAN,
-		interval:    30 * time.Second, // s.config.RetryJoinIntervalWAN,
-		join:        comboFn,
+		variant:     retryJoinMeshGatewayVariant,
+		cluster:     "primary",
+		addrs:       a.config.PrimaryGateways,
+		maxAttempts: 0,
+		interval:    a.config.PrimaryGatewaysInterval,
+		join:        a.RefreshPrimaryGatewayFallbackAddresses,
 		logger:      a.logger,
+		stopCh:      a.PrimaryMeshGatewayAddressesReadyCh(),
 	}
 	if err := r.retryJoin(); err != nil {
-		a.primaryMeshGatewayRefreshCh <- err
+		a.retryJoinCh <- err
 	}
 }
 
@@ -142,11 +138,12 @@ type retryJoiner struct {
 	// interval is the time between two join attempts.
 	interval time.Duration
 
-	notifyRejoin chan struct{}
-
 	// join adds the discovered or configured servers to the given
 	// serf cluster.
 	join func([]string) (int, error)
+
+	// stopCh is an optional stop channel to exit the retry loop early
+	stopCh <-chan struct{}
 
 	// logger is the agent logger. Log messages should contain the
 	// "agent: " prefix.
@@ -174,11 +171,6 @@ func (r *retryJoiner) retryJoin() error {
 	attempt := 0
 	for {
 		addrs := retryJoinAddrs(disco, r.variant, r.cluster, r.addrs, r.logger)
-		if r.variant == retryJoinMeshGatewayVariant { // TODO
-			r.logger.Printf("[DEBUG] agent retryJoin looping for MGW named %q", r.cluster)
-		} else { // TODO
-			r.logger.Printf("[DEBUG] agent retryJoin looping for JOIN type %q", r.cluster)
-		}
 		if len(addrs) > 0 {
 			n, err := r.join(addrs)
 			if err == nil {
@@ -214,9 +206,9 @@ func (r *retryJoiner) retryJoin() error {
 
 		select {
 		case <-time.After(r.interval):
-		case <-r.notifyRejoin:
-			//TODO
-			r.logger.Printf("[DEBUG] agent: WOKE UP %q", r.cluster)
+		case <-r.stopCh:
+			r.logger.Printf("[DEBUG] agent: loop variant=%q cluster=%q terminated early", r.variant, r.cluster)
+			return nil
 		}
 	}
 }

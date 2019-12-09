@@ -1044,6 +1044,14 @@ func (s *Server) JoinWAN(addrs []string) (int, error) {
 	return s.serfWAN.Join(addrs, true)
 }
 
+// TODO : this will be closed when dc configs ship back at least one primary mgw (does not count fallback)
+func (s *Server) PrimaryMeshGatewayAddressesReadyCh() <-chan struct{} {
+	if s.gatewayLocator == nil {
+		return nil
+	}
+	return s.gatewayLocator.PrimaryMeshGatewayAddressesReadyCh()
+}
+
 func (s *Server) RefreshPrimaryGatewayFallbackAddresses(addrs []string) (int, error) {
 	sort.Strings(addrs)
 

@@ -132,6 +132,10 @@ func (s *Server) setupSerf(conf *serf.Config, ch chan serf.Event, path string, w
 	// node which is rather unexpected.
 	conf.EnableNameConflictResolution = false
 
+	if wan && s.config.ConnectMeshGatewayWANFederationEnabled {
+		conf.MemberlistConfig.RequireNodeNames = true
+	}
+
 	if !s.config.DevMode {
 		conf.SnapshotPath = filepath.Join(s.config.DataDir, path)
 	}

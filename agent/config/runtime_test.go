@@ -584,6 +584,36 @@ func TestConfigFlagsAndEdgecases(t *testing.T) {
 			},
 		},
 		{
+			desc: "-primary-gateways",
+			args: []string{
+				`-server`,
+				`-datacenter=dc2`,
+				`-primary-gateways=a`,
+				`-primary-gateways=b`,
+				`-data-dir=` + dataDir,
+			},
+			patch: func(rt *RuntimeConfig) {
+				rt.Datacenter = "dc2"
+				rt.PrimaryGateways = []string{"a", "b"}
+				rt.DataDir = dataDir
+				// server things
+				rt.ServerMode = true
+				rt.LeaveOnTerm = false
+				rt.SkipLeaveOnInt = true
+			},
+		},
+		{
+			desc: "-primary-gateways-interval",
+			args: []string{
+				`-primary-gateways-interval=5s`,
+				`-data-dir=` + dataDir,
+			},
+			patch: func(rt *RuntimeConfig) {
+				rt.PrimaryGatewaysInterval = 5 * time.Second
+				rt.DataDir = dataDir
+			},
+		},
+		{
 			desc: "-protocol",
 			args: []string{
 				`-protocol=1`,
@@ -2938,25 +2968,6 @@ func TestConfigFlagsAndEdgecases(t *testing.T) {
 			`},
 			err: "'primary_gateways' should only be configured in a secondary datacenter",
 		},
-		{
-			desc: "-primary-gateways",
-			args: []string{
-				`-server`,
-				`-datacenter=dc2`,
-				`-primary-gateways=a`,
-				`-primary-gateways=b`,
-				`-data-dir=` + dataDir,
-			},
-			patch: func(rt *RuntimeConfig) {
-				rt.Datacenter = "dc2"
-				rt.PrimaryGateways = []string{"a", "b"}
-				rt.DataDir = dataDir
-				// server things
-				rt.ServerMode = true
-				rt.LeaveOnTerm = false
-				rt.SkipLeaveOnInt = true
-			},
-		},
 
 		// ------------------------------------------------------------
 		// ConfigEntry Handling
@@ -3937,6 +3948,7 @@ func TestFullConfig(t *testing.T) {
 			"protocol": 30793,
 			"primary_datacenter": "ejtmd43d",
 			"primary_gateways": [ "aej8eeZo", "roh2KahS" ],
+			"primary_gateways_interval": "18866s",
 			"raft_protocol": 19016,
 			"raft_snapshot_threshold": 16384,
 			"raft_snapshot_interval": "30s",
@@ -4540,6 +4552,7 @@ func TestFullConfig(t *testing.T) {
 			protocol = 30793
 			primary_datacenter = "ejtmd43d"
 			primary_gateways = [ "aej8eeZo", "roh2KahS" ]
+			primary_gateways_interval = "18866s"
 			raft_protocol = 19016
 			raft_snapshot_threshold = 16384
 			raft_snapshot_interval = "30s"
@@ -5205,6 +5218,7 @@ func TestFullConfig(t *testing.T) {
 		PidFile:                                "43xN80Km",
 		PrimaryDatacenter:                      "ejtmd43d",
 		PrimaryGateways:                        []string{"aej8eeZo", "roh2KahS"},
+		PrimaryGatewaysInterval:                18866 * time.Second,
 		RPCAdvertiseAddr:                       tcpAddr("17.99.29.16:3757"),
 		RPCBindAddr:                            tcpAddr("16.99.34.17:3757"),
 		RPCHoldTimeout:                         15707 * time.Second,
@@ -6072,6 +6086,7 @@ func TestSanitize(t *testing.T) {
 		"PrimaryGateways": [
 			"pmgw_foo=bar pmgw_key=baz pmgw_secret=boom pmgw_bang=bar"
 		],
+		"PrimaryGatewaysInterval": "0s",
 		"RPCAdvertiseAddr": "",
 		"RPCBindAddr": "",
 		"RPCHoldTimeout": "0s",

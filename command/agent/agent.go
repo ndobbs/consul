@@ -334,9 +334,6 @@ func (c *cmd) run(args []string) int {
 		case err := <-agent.RetryJoinCh():
 			c.logger.Println("[ERR] agent: Retry join failed: ", err)
 			return 1
-		case err := <-agent.PrimaryMeshGatewayRefreshCh():
-			c.logger.Println("[ERR] agent: Refreshing primary mesh gateway fallback addresses failed: ", err)
-			return 1
 		case <-agent.ShutdownCh():
 			// agent is already down!
 			return 0
